@@ -153,7 +153,7 @@ Note 节点支持完整的 Markdown 渲染，适合在调用图中添加说明�
 如果使用其他 AI 工具，可以复制以下提示词模板，将 `{文件路径或代码}` 替换为你的实际内容：
 
 ```
-请分析以下代码的函数调用关系，生成 XX.callgraph.json 文件。
+请分析以下代码的函数调用关系,生成 XX.callgraph.json 文件。
 
 要求：
 - 输出格式为 JSON，包含 nodes 和 edges 两个数组
@@ -162,13 +162,29 @@ Note 节点支持完整的 Markdown 渲染，适合在调用图中添加说明�
 - label 格式：如果是类方法，用 "方法名\n类名"（\n 换行）
 - line 从 0 开始计数
 - uri 使用相对于工作区的路径
-- signature 只写参数类型，如 "(number, string)"
+- signature 格式：
+  * 有类型注解的语言（TypeScript/Java/C#/Go/Rust）：填参数类型，如 "(number, string)"
+  * 无类型注解的语言（Python/Ruby/Lua/JavaScript）：填参数名，如 "(name, level)"
 
 代码：
 {文件路径或代码}
 ```
 
 AI 会输出符合格式的 `.callgraph.json` 内容，直接保存为 `xxx.callgraph.json` 文件即可在编辑器中打开。
+
+**Note 节点简易提示词**
+
+用于总结内容，并给指定文件添加一个 Note 节点：
+
+```
+总结 {内容}，给 {文件} 添加一个 note 节点。
+
+要求：
+- 保留原有 nodes 与 edges 不变
+- 追加一个 node：id 为 "note-1"，label 为 "Note"，type 为 "note"
+- content：{内容} 的简短 Markdown 总结
+- edges 保持不变（不新增边）
+```
 
 ---
 

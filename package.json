@@ -19,6 +19,7 @@
 	"homepage": "https://github.com/dearmydear/call-graph-editor#readme",
 	"keywords": [
 		"call graph",
+		"node graph",
 		"code visualization",
 		"function calls",
 		"method calls",

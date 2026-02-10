@@ -162,13 +162,29 @@ Requirements:
 - Label format: For class methods, use "methodName\nClassName" (\n for newline)
 - Line numbers start from 0
 - URI uses workspace-relative paths
-- Signature contains only parameter types, e.g., "(number, string)"
+- Signature format:
+  * Typed languages (TypeScript/Java/C#/Go/Rust): parameter types only, e.g., "(number, string)"
+  * Untyped languages (Python/Ruby/Lua/JavaScript): parameter names, e.g., "(name, level)"
 
 Code:
 {file path or code}
 ```
 
 AI will output `.callgraph.json` content in the correct format. Save as `xxx.callgraph.json` to open in editor.
+
+**Note Node Quick Prompt**
+
+Use this when you want to summarize content and add a note node to an existing file:
+
+```
+Summarize {content} and add a note node to {file}.
+
+Requirements:
+- Keep all existing nodes and edges unchanged
+- Append one node: id "note-1", label "Note", type "note"
+- content: short Markdown summary of {content}
+- edges: leave as-is (do not add new edges)
+```
 
 ---
 
