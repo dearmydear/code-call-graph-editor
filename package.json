@@ -4,17 +4,34 @@
 	"description": "%description%",
 	"version": "0.0.1",
 	"publisher": "callgraph-editor",
-	"private": true,
+	"private": false,
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/yourusername/call-graph-editor"
+		"url": "https://github.com/dearmydear/call-graph-editor"
 	},
+	"bugs": {
+		"url": "https://github.com/dearmydear/call-graph-editor/issues"
+	},
+	"homepage": "https://github.com/dearmydear/call-graph-editor#readme",
+	"keywords": [
+		"call graph",
+		"code visualization",
+		"function calls",
+		"method calls",
+		"code analysis",
+		"LSP",
+		"call hierarchy",
+		"visual editor",
+		"diagram",
+		"graph editor"
+	],
 	"engines": {
 		"vscode": "^1.100.0"
 	},
 	"categories": [
-		"Other"
+		"Visualization",
+		"Programming Languages"
 	],
 	"activationEvents": [],
 	"main": "./out/extension.js",
@@ -22,39 +39,17 @@
 	"contributes": {
 		"customEditors": [
 			{
-				"viewType": "catCustoms.catScratch",
-				"displayName": "%customEditor.catScratch%",
-				"selector": [
-					{
-						"filenamePattern": "*.cscratch"
-					}
-				]
-			},
-			{
-				"viewType": "catCustoms.pawDraw",
-				"displayName": "%customEditor.pawDraw%",
-				"selector": [
-					{
-						"filenamePattern": "*.pawdraw"
-					}
-				]
-			},
-			{
 				"viewType": "codeCallGraph.callGraph",
 				"displayName": "%customEditor.callGraph%",
 				"selector": [
 					{
 						"filenamePattern": "*.callgraph.json"
 					}
-				]
+				],
+				"priority": "default"
 			}
 		],
 		"commands": [
-			{
-				"command": "catCustoms.pawDraw.new",
-				"title": "%command.pawDraw.new%",
-				"category": "Paw Draw"
-			},
 			{
 				"command": "callGraph.testLSP",
 				"title": "%command.testLSP%",

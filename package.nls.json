@@ -1,10 +1,7 @@
 {
 	"displayName": "Code Call Graph Editor",
 	"description": "Visual editor for code call relationships",
-	"customEditor.catScratch": "Cat Scratch",
-	"customEditor.pawDraw": "Paw Draw",
 	"customEditor.callGraph": "Call Graph",
-	"command.pawDraw.new": "Create new Paw Draw Document",
 	"command.testLSP": "Test LSP Call Hierarchy Query",
 	"command.createGraphFromMethod": "Create Call Graph",
 	"command.addToMethodLibrary": "Add to Method Library",

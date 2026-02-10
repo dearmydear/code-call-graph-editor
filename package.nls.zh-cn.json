@@ -1,10 +1,7 @@
 {
 	"displayName": "代码调用图编辑器",
 	"description": "代码调用关系可视化编辑器",
-	"customEditor.catScratch": "Cat Scratch",
-	"customEditor.pawDraw": "Paw Draw",
 	"customEditor.callGraph": "调用图",
-	"command.pawDraw.new": "Create new Paw Draw Document",
 	"command.testLSP": "测试 LSP 调用层次查询",
 	"command.createGraphFromMethod": "创建节点关系图",
 	"command.addToMethodLibrary": "添加到方法库",
