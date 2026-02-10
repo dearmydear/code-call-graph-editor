@@ -1,0 +1,20 @@
+{
+  "title": "nothing 调用关系图",
+  "nodes": [
+    {
+      "id": "node-1770341820413",
+      "label": "complex\nCalculator",
+      "type": "code",
+      "symbol": {
+        "name": "complex",
+        "uri": "test-lsp-example.ts",
+        "containerName": "Calculator",
+        "line": 46
+      },
+      "status": "normal",
+      "x": 400,
+      "y": 300
+    }
+  ],
+  "edges": []
+}

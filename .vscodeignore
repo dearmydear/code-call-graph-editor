@@ -1,0 +1,30 @@
+# 源代码
+src/**
+tsconfig.json
+eslint.config.mjs
+esbuild.webview.mjs
+
+# 开发工具
+.vscode/**
+.github/**
+
+# 临时文件
+tmpclaude-*
+*.log
+
+# Node modules (不需要打包所有依赖)
+node_modules/**
+!node_modules/@antv/x6/**
+!node_modules/reactflow/**
+!node_modules/react/**
+!node_modules/react-dom/**
+
+# 示例文件（可选，如果想包含示例就注释掉这行）
+# exampleFiles/**
+
+# Git
+.git/**
+.gitignore
+
+# 其他
+*.vsix

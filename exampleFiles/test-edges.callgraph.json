@@ -1,0 +1,38 @@
+{
+  "title": "测试边",
+  "nodes": [
+    {
+      "id": "node1",
+      "label": "节点 A",
+      "type": "code",
+      "x": -80,
+      "y": -10
+    },
+    {
+      "id": "node2",
+      "label": "节点 B",
+      "type": "code",
+      "x": 290,
+      "y": -30
+    },
+    {
+      "id": "node3",
+      "label": "节点 C",
+      "type": "code",
+      "x": 150,
+      "y": 330
+    }
+  ],
+  "edges": [
+    {
+      "from": "node1",
+      "to": "node3",
+      "type": "call"
+    },
+    {
+      "from": "node2",
+      "to": "node3",
+      "type": "call"
+    }
+  ]
+}

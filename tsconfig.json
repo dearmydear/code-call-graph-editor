@@ -1,0 +1,23 @@
+{
+	"compilerOptions": {
+		"module": "commonjs",
+		"target": "ES2022",
+		"lib": [
+			"ES2022",
+			"DOM"
+		],
+		"outDir": "out",
+		"sourceMap": true,
+		"strict": true,
+		"rootDir": "src",
+		"jsx": "react-jsx",
+		"esModuleInterop": true,
+		"skipLibCheck": true
+	},
+	"exclude": [
+		"node_modules",
+		".vscode-test",
+		"exampleFiles",
+		"src/webview"
+	]
+}

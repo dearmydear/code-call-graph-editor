@@ -1,0 +1,264 @@
+{
+	"name": "code-call-graph-editor",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "0.0.1",
+	"publisher": "callgraph-editor",
+	"private": true,
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/yourusername/call-graph-editor"
+	},
+	"engines": {
+		"vscode": "^1.100.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [],
+	"main": "./out/extension.js",
+	"l10n": "./l10n",
+	"contributes": {
+		"customEditors": [
+			{
+				"viewType": "catCustoms.catScratch",
+				"displayName": "%customEditor.catScratch%",
+				"selector": [
+					{
+						"filenamePattern": "*.cscratch"
+					}
+				]
+			},
+			{
+				"viewType": "catCustoms.pawDraw",
+				"displayName": "%customEditor.pawDraw%",
+				"selector": [
+					{
+						"filenamePattern": "*.pawdraw"
+					}
+				]
+			},
+			{
+				"viewType": "codeCallGraph.callGraph",
+				"displayName": "%customEditor.callGraph%",
+				"selector": [
+					{
+						"filenamePattern": "*.callgraph.json"
+					}
+				]
+			}
+		],
+		"commands": [
+			{
+				"command": "catCustoms.pawDraw.new",
+				"title": "%command.pawDraw.new%",
+				"category": "Paw Draw"
+			},
+			{
+				"command": "callGraph.testLSP",
+				"title": "%command.testLSP%",
+				"category": "Call Graph"
+			},
+			{
+				"command": "callGraph.createGraphFromMethod",
+				"title": "%command.createGraphFromMethod%",
+				"category": "Call Graph",
+				"icon": "$(graph)"
+			},
+			{
+				"command": "callGraph.addToMethodLibrary",
+				"title": "%command.addToMethodLibrary%",
+				"category": "Call Graph",
+				"icon": "$(library)"
+			},
+			{
+				"command": "callGraph.viewMethodLibrary",
+				"title": "%command.viewMethodLibrary%",
+				"category": "Call Graph"
+			},
+			{
+				"command": "callGraph.clearMethodLibrary",
+				"title": "%command.clearMethodLibrary%",
+				"category": "Call Graph"
+			}
+		],
+		"menus": {
+			"editor/context": [
+				{
+					"command": "callGraph.createGraphFromMethod",
+					"when": "editorTextFocus && editorHasDefinitionProvider",
+					"group": "callgraph@1"
+				},
+				{
+					"command": "callGraph.addToMethodLibrary",
+					"when": "editorTextFocus && editorHasDefinitionProvider",
+					"group": "callgraph@2"
+				}
+			]
+		},
+		"keybindings": [
+			{
+				"command": "callGraph.createGraphFromMethod",
+				"key": "ctrl+shift+g",
+				"mac": "cmd+shift+g",
+				"when": "editorTextFocus"
+			},
+			{
+				"command": "callGraph.addToMethodLibrary",
+				"key": "ctrl+shift+m",
+				"mac": "cmd+shift+m",
+				"when": "editorTextFocus"
+			}
+		],
+		"configuration": {
+			"title": "%config.title%",
+			"properties": {
+				"callGraph.predefinedTags": {
+					"type": "array",
+					"default": [
+						{
+							"name": "循环",
+							"color": "#4CAF50"
+						},
+						{
+							"name": "判断",
+							"color": "#FF9800"
+						},
+						{
+							"name": "异步",
+							"color": "#2196F3"
+						},
+						{
+							"name": "入口",
+							"color": "#9C27B0"
+						},
+						{
+							"name": "关键",
+							"color": "#F44336"
+						},
+						{
+							"name": "待办",
+							"color": "#FFEB3B"
+						}
+					],
+					"description": "%config.predefinedTags.description%",
+					"items": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"type": "string",
+								"description": "%config.predefinedTags.name%"
+							},
+							"color": {
+								"type": "string",
+								"description": "%config.predefinedTags.color%"
+							}
+						}
+					}
+				},
+				"callGraph.showFileNameTag": {
+					"type": "boolean",
+					"default": false,
+					"description": "%config.showFileNameTag%"
+				},
+				"callGraph.fileNameTagColor": {
+					"type": "string",
+					"default": "#607D8B",
+					"description": "%config.fileNameTagColor%"
+				},
+				"callGraph.codeNodeColor": {
+					"type": "object",
+					"default": {
+						"fill": "#1e3a5f",
+						"stroke": "#4a9eff"
+					},
+					"description": "%config.codeNodeColor%",
+					"properties": {
+						"fill": {
+							"type": "string",
+							"description": "%config.codeNodeColor.fill%"
+						},
+						"stroke": {
+							"type": "string",
+							"description": "%config.codeNodeColor.stroke%"
+						}
+					}
+				},
+				"callGraph.noteNodeColor": {
+					"type": "object",
+					"default": {
+						"fill": "#1A1A1A",
+						"stroke": "#555555"
+					},
+					"description": "%config.noteNodeColor%",
+					"properties": {
+						"fill": {
+							"type": "string",
+							"description": "%config.noteNodeColor.fill%"
+						},
+						"stroke": {
+							"type": "string",
+							"description": "%config.noteNodeColor.stroke%"
+						}
+					}
+				},
+				"callGraph.unboundCodeNodeColor": {
+					"type": "object",
+					"default": {
+						"fill": "#3d2020",
+						"stroke": "#d48a8a"
+					},
+					"description": "%config.unboundCodeNodeColor%",
+					"properties": {
+						"fill": {
+							"type": "string",
+							"description": "%config.unboundCodeNodeColor.fill%"
+						},
+						"stroke": {
+							"type": "string",
+							"description": "%config.unboundCodeNodeColor.stroke%"
+						}
+					}
+				},
+				"callGraph.removeMethodAfterBind": {
+					"type": "boolean",
+					"default": false,
+					"description": "%config.removeMethodAfterBind%"
+				}
+			}
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile && npm run build:webview",
+		"compile": "tsc -p ./",
+		"build:webview": "node esbuild.webview.mjs --production",
+		"watch:webview": "node esbuild.webview.mjs --watch",
+		"lint": "eslint",
+		"watch": "tsc -w -p ./"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.13.0",
+		"@stylistic/eslint-plugin": "^2.9.0",
+		"@types/node": "^22",
+		"@types/vscode": "^1.100.0",
+		"@vscode/vsce": "^3.7.1",
+		"esbuild": "^0.27.2",
+		"eslint": "^9.13.0",
+		"typescript": "^5.9.2",
+		"typescript-eslint": "^8.39.0"
+	},
+	"dependencies": {
+		"@antv/x6": "^2.19.2",
+		"@antv/x6-plugin-clipboard": "^2.1.6",
+		"@antv/x6-plugin-history": "^2.2.4",
+		"@antv/x6-plugin-keyboard": "^2.2.3",
+		"@antv/x6-plugin-selection": "^2.2.2",
+		"@antv/x6-plugin-snapline": "^2.1.7",
+		"@dagrejs/dagre": "^2.0.4",
+		"@types/markdown-it": "^14.1.2",
+		"elkjs": "^0.11.0",
+		"markdown-it": "^14.1.0",
+		"markdown-it-task-lists": "^2.1.1"
+	}
+}
