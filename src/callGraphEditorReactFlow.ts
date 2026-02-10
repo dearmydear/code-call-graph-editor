@@ -311,6 +311,12 @@ export class CallGraphEditorProvider implements vscode.CustomTextEditorProvider 
 	 * Navigate to code location based on node symbol
 	 */
 	private async navigateToCode(node: Node, webview: vscode.Webview): Promise<void> {
+		console.log('[导航] 开始跳转:', JSON.stringify({
+			nodeId: node.id,
+			label: node.label,
+			symbol: node.symbol,
+		}));
+
 		if (!node.symbol) {
 			vscode.window.showWarningMessage(vscode.l10n.t('This node has no bound code symbol'));
 			webview.postMessage({
@@ -334,6 +340,7 @@ export class CallGraphEditorProvider implements vscode.CustomTextEditorProvider 
 			}
 
 			const fileUri = vscode.Uri.joinPath(workspaceFolder.uri, node.symbol.uri);
+			console.log('[导航] 目标文件:', fileUri.fsPath);
 
 			// 尝试打开文件
 			let doc: vscode.TextDocument;
@@ -375,9 +382,14 @@ export class CallGraphEditorProvider implements vscode.CustomTextEditorProvider 
 			);
 
 			if (symbols) {
+				console.log('[导航] DocumentSymbol 数量:', symbols.length);
+				console.log('[导航] 查找参数: name=%s, containerName=%s, line=%s',
+					node.symbol.name, node.symbol.containerName ?? '(无)', node.symbol.line ?? '(无)');
 				const targetSymbol = this.findSymbol(symbols, node.symbol.name, node.symbol.containerName, node.symbol.line);
 				if (targetSymbol) {
 					const position = targetSymbol.selectionRange.start;
+					console.log('[导航] ✅ LSP 符号匹配成功: "%s" → 行 %d, 列 %d',
+						targetSymbol.name, position.line + 1, position.character);
 					editor.selection = new vscode.Selection(position, position);
 					editor.revealRange(targetSymbol.selectionRange, vscode.TextEditorRevealType.InCenter);
 					// 跳转成功
@@ -387,11 +399,14 @@ export class CallGraphEditorProvider implements vscode.CustomTextEditorProvider 
 					});
 					return;
 				}
+			} else {
+				console.log('[导航] ⚠️ DocumentSymbol 提供者返回空');
 			}
 
 			// 回退：使用行号
 			if (node.symbol.line !== undefined) {
 				const line = node.symbol.line;
+				console.log('[导航] 📍 回退到行号定位: 行 %d', line + 1);
 				const position = new vscode.Position(line, 0);
 				editor.selection = new vscode.Selection(position, position);
 				editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
@@ -404,6 +419,7 @@ export class CallGraphEditorProvider implements vscode.CustomTextEditorProvider 
 			}
 			
 			// 找不到符号，标记为 broken
+			console.log('[导航] ❌ 未找到符号，标记为 broken');
 			vscode.window.showWarningMessage(vscode.l10n.t('Symbol not found: {0}', node.symbol.name));
 			webview.postMessage({
 				type: 'navigationFailed',
@@ -430,10 +446,26 @@ export class CallGraphEditorProvider implements vscode.CustomTextEditorProvider 
 		symbols: vscode.DocumentSymbol[],
 		name: string,
 		containerName?: string,
-		line?: number
+		line?: number,
+		_depth: number = 0
 	): vscode.DocumentSymbol | undefined {
 		// 提取目标纯方法名
 		const { bareName: targetBareName } = normalizeSymbolName(name);
+		const indent = '  '.repeat(_depth);
+
+		if (_depth === 0) {
+			console.log('[查找] 开始查找符号: name="%s", bareName="%s", container="%s", line=%s',
+				name, targetBareName, containerName ?? '(无)', line ?? '(无)');
+		}
+
+		// 构建限定名变体（用于 Lua 等语言：Container.method / Container:method）
+		const qualifiedNames: string[] = [];
+		if (containerName) {
+			qualifiedNames.push(`${containerName}.${name}`);
+			qualifiedNames.push(`${containerName}:${name}`);
+			qualifiedNames.push(`${containerName}.${targetBareName}`);
+			qualifiedNames.push(`${containerName}:${targetBareName}`);
+		}
 
 		for (const symbol of symbols) {
 			const { bareName: symbolBareName } = normalizeSymbolName(symbol.name);
@@ -441,38 +473,106 @@ export class CallGraphEditorProvider implements vscode.CustomTextEditorProvider 
 			// 如果有容器名，先找容器
 			if (containerName) {
 				if (symbol.name === containerName && symbol.children) {
+					console.log('%s[查找] 找到容器 "%s"，子符号: [%s]',
+						indent, containerName,
+						symbol.children.map(c => `"${c.name}"(L${c.selectionRange.start.line})`).join(', '));
+
 					// 在容器内查找：精确匹配 → 纯名匹配 → 行号匹配
 					const exactChild = symbol.children.find(c => c.name === name);
-					if (exactChild) return exactChild;
+					if (exactChild) {
+						console.log('%s[查找] ✅ 容器内精确匹配: "%s"', indent, exactChild.name);
+						return exactChild;
+					}
 
 					const bareChild = symbol.children.find(c => {
 						const { bareName } = normalizeSymbolName(c.name);
 						return bareName === targetBareName;
 					});
-					if (bareChild) return bareChild;
+					if (bareChild) {
+						console.log('%s[查找] ✅ 容器内 bareName 匹配: "%s" → "%s"', indent, bareChild.name, targetBareName);
+						return bareChild;
+					}
 
 					// 按行号匹配（最可靠的二次匹配）
 					if (line !== undefined) {
 						const lineChild = symbol.children.find(c => c.selectionRange.start.line === line);
-						if (lineChild) return lineChild;
+						if (lineChild) {
+							console.log('%s[查找] ✅ 容器内行号匹配: "%s" (L%d)', indent, lineChild.name, line);
+							return lineChild;
+						}
 					}
+
+					console.log('%s[查找] ⚠️ 容器 "%s" 内未找到匹配', indent, containerName);
+				}
+
+				// 限定名匹配（Lua/Python 等语言：符号名为 "Container.method" 或 "Container:method"）
+				if (qualifiedNames.includes(symbol.name)) {
+					console.log('%s[查找] ✅ 限定名匹配: "%s" (L%d)', indent, symbol.name, symbol.selectionRange.start.line);
+					return symbol;
+				}
+				// 限定名的 bareName 匹配（如 C# "Container.Method(Type)" → bareName "Container.Method"）
+				if (qualifiedNames.includes(symbolBareName) && symbolBareName !== symbol.name) {
+					console.log('%s[查找] ✅ 限定名 bareName 匹配: "%s" → "%s" (L%d)',
+						indent, symbol.name, symbolBareName, symbol.selectionRange.start.line);
+					return symbol;
+				}
+
+				// 后缀匹配（Lua 等语言：代码用 pmodule:method 但 containerName 是模块名）
+				// 符号名以 .name 或 :name 结尾即可匹配
+				const suffixes = [`.${name}`, `:${name}`, `.${targetBareName}`, `:${targetBareName}`];
+				if (suffixes.some(s => symbol.name.endsWith(s) || symbolBareName.endsWith(s))) {
+					console.log('%s[查找] ✅ 后缀匹配: "%s" 匹配方法名 "%s" (L%d)',
+						indent, symbol.name, name, symbol.selectionRange.start.line);
+					return symbol;
 				}
 			}
 
 			// 精确匹配名称
 			if (symbol.name === name) {
+				console.log('%s[查找] ✅ 精确名称匹配: "%s" (L%d)', indent, symbol.name, symbol.selectionRange.start.line);
 				return symbol;
 			}
 
 			// 纯名匹配（去掉参数后的方法名）
 			if (symbolBareName === targetBareName && symbolBareName !== symbol.name) {
+				console.log('%s[查找] ✅ bareName 匹配: "%s" → "%s" (L%d)',
+					indent, symbol.name, targetBareName, symbol.selectionRange.start.line);
 				return symbol;
 			}
 
 			// 递归搜索子符号
 			if (symbol.children) {
-				const found = this.findSymbol(symbol.children, name, containerName, line);
-				if (found) return found;
+				const found = this.findSymbol(symbol.children, name, containerName, line, _depth + 1);
+				if (found) { return found; }
+			}
+		}
+
+		// 最终回退：在所有符号中按行号匹配（跨语言兜底）
+		if (_depth === 0 && line !== undefined) {
+			const lineMatch = this.findSymbolByLine(symbols, line);
+			if (lineMatch) {
+				console.log('[查找] ✅ 全局行号回退匹配: "%s" (L%d)', lineMatch.name, line);
+				return lineMatch;
+			}
+		}
+
+		if (_depth === 0) {
+			console.log('[查找] ❌ 未找到匹配符号');
+		}
+		return undefined;
+	}
+
+	/**
+	 * 在符号树中按行号递归查找符号
+	 */
+	private findSymbolByLine(symbols: vscode.DocumentSymbol[], line: number): vscode.DocumentSymbol | undefined {
+		for (const symbol of symbols) {
+			if (symbol.selectionRange.start.line === line) {
+				return symbol;
+			}
+			if (symbol.children) {
+				const found = this.findSymbolByLine(symbol.children, line);
+				if (found) { return found; }
 			}
 		}
 		return undefined;

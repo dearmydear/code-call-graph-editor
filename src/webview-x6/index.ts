@@ -84,6 +84,12 @@ let autoLayoutBar: HTMLElement | null = null;  // 常驻自动布局按钮
 let layoutDirection: 'TB' | 'LR' = 'TB';  // 布局方向
 let currentLayoutAlgorithm = 'dagre';  // 当前布局算法
 
+// ---- Tooltip 状态 ----
+let tooltipEl: HTMLElement | null = null;      // tooltip DOM 元素
+let tooltipTimer: number = 0;                  // 悬停延迟计时器
+let tooltipCurrentNode: Node | null = null;    // 当前悬停的节点
+const TOOLTIP_DELAY = 500;                     // 悬停延迟 (ms)
+
 // 根据布局方向返回 manhattan router 的方向约束
 function getRouterDirections(): { startDirections: string[]; endDirections: string[] } {
   if (layoutDirection === 'LR') {
@@ -1407,6 +1413,134 @@ function escapeHtml(text: string): string {
   return div.innerHTML;
 }
 
+// ============================================================
+// Tooltip 功能：悬停代码节点 500ms 后显示详情
+// ============================================================
+
+/** 创建 tooltip DOM 元素（懒初始化） */
+function ensureTooltipElement(): HTMLElement {
+  if (tooltipEl) { return tooltipEl; }
+
+  const el = document.createElement('div');
+  el.className = 'cg-tooltip';
+  el.style.cssText = `
+    position: fixed;
+    display: none;
+    pointer-events: none;
+    z-index: 10000;
+    max-width: 420px;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: var(--vscode-editorHoverWidget-background, #2d2d2d);
+    color: var(--vscode-editorHoverWidget-foreground, #cccccc);
+    border: 1px solid var(--vscode-editorHoverWidget-border, #454545);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    font-family: var(--vscode-editor-font-family, Consolas, 'Courier New', monospace);
+  `;
+  document.body.appendChild(el);
+  tooltipEl = el;
+  return el;
+}
+
+/** 开始 tooltip 计时器，延迟后显示 */
+function startTooltipTimer(node: Node, clientX: number, clientY: number) {
+  cancelTooltip();
+  tooltipCurrentNode = node;
+
+  const data = node.getData() as CallGraphNode | undefined;
+  // 只对 code 节点显示 tooltip（note 节点内容太长且已直接可见）
+  if (!data || data.type === 'note') { return; }
+
+  tooltipTimer = window.setTimeout(() => {
+    showTooltip(node, data, clientX, clientY);
+  }, TOOLTIP_DELAY);
+}
+
+/** 取消 tooltip 计时器并隐藏 */
+function cancelTooltip() {
+  if (tooltipTimer) {
+    clearTimeout(tooltipTimer);
+    tooltipTimer = 0;
+  }
+  tooltipCurrentNode = null;
+  if (tooltipEl) {
+    tooltipEl.style.display = 'none';
+  }
+}
+
+/** 显示 tooltip */
+function showTooltip(node: Node, data: CallGraphNode, mouseX: number, mouseY: number) {
+  // 如果正在编辑节点或连接模式，不显示
+  if (editingNode || isConnectingMode) { return; }
+  // 如果鼠标已离开节点，不显示
+  if (tooltipCurrentNode !== node) { return; }
+
+  const el = ensureTooltipElement();
+  const sym = data.symbol;
+
+  // 构建 tooltip 内容
+  const lines: string[] = [];
+
+  // 方法名
+  const displayName = data.label || sym?.name || node.id;
+  // 如果 label 包含 \n，拆分为 方法名 和 类名
+  const labelParts = displayName.split('\n');
+  if (labelParts.length >= 2) {
+    lines.push(`📦 ${labelParts[1]}.${labelParts[0]}`);
+  } else {
+    lines.push(`🔹 ${labelParts[0]}`);
+  }
+
+  if (sym) {
+    // 签名
+    if (sym.signature) {
+      lines.push(`📝 ${sym.name}${sym.signature}`);
+    }
+
+    // 文件路径 + 行号
+    if (sym.uri) {
+      const lineStr = sym.line !== undefined ? `:${sym.line + 1}` : '';
+      lines.push(`📄 ${sym.uri}${lineStr}`);
+    }
+  }
+
+  // 状态
+  if (data.status === 'broken') {
+    lines.push('⚠️ 符号已失效');
+  } else if (!sym) {
+    lines.push('⚠️ 未绑定代码');
+  }
+
+  // 标签
+  if (data.tags && data.tags.length > 0) {
+    lines.push(`🏷️ ${data.tags.join(', ')}`);
+  }
+
+  el.textContent = lines.join('\n');
+  el.style.display = 'block';
+
+  // 定位：显示在鼠标下方偏右，避免超出视口
+  const margin = 12;
+  let left = mouseX + margin;
+  let top = mouseY + margin;
+
+  // 防止右侧超出
+  if (left + el.offsetWidth > window.innerWidth - margin) {
+    left = mouseX - el.offsetWidth - margin;
+  }
+  // 防止底部超出
+  if (top + el.offsetHeight > window.innerHeight - margin) {
+    top = mouseY - el.offsetHeight - margin;
+  }
+
+  el.style.left = `${Math.max(0, left)}px`;
+  el.style.top = `${Math.max(0, top)}px`;
+}
+
 // 更新节点的标签 DOM
 function updateNodeTagsDom(node: Node, displayTags?: string[]) {
   const view = graph?.findViewByCell(node);
@@ -1743,6 +1877,7 @@ function initGraph() {
   graph.on('node:contextmenu', ({ e, node }) => {
     e.preventDefault();
     e.stopPropagation();
+    cancelTooltip();
     
     // 如果rightMouseDownPos为null，说明已经拖动过，不显示菜单
     if (!rightMouseDownPos) {
@@ -1842,6 +1977,7 @@ function initGraph() {
   // 点击节点
   graph.on('node:click', ({ node }) => {
     hideContextMenu();
+    cancelTooltip();
     // 不隐藏工具栏，让 node:selected 事件处理工具栏显示
 
     // 如果处于连接模式，完成连接
@@ -1850,8 +1986,8 @@ function initGraph() {
     }
   });
   
-  // 节点悬停 - 连接模式下高亮
-  graph.on('node:mouseenter', ({ node }) => {
+  // 节点悬停 - 连接模式下高亮 + tooltip
+  graph.on('node:mouseenter', ({ node, e }) => {
     if (isConnectingMode && node !== connectingSourceNode) {
       // 恢复上一个悬停节点
       if (connectingHoverNode && connectingHoverNode !== node) {
@@ -1867,9 +2003,12 @@ function initGraph() {
       node.attr('body/stroke', '#ffaa00');
       node.attr('body/strokeWidth', 3);
     }
+
+    // Tooltip: 开始计时
+    startTooltipTimer(node, e.clientX, e.clientY);
   });
 
-  // 节点离开 - 恢复样式
+  // 节点离开 - 恢复样式 + 隐藏 tooltip
   graph.on('node:mouseleave', ({ node }) => {
     if (isConnectingMode && connectingHoverNode === node) {
       const data = node.getData() || {};
@@ -1879,11 +2018,15 @@ function initGraph() {
       node.attr('body/strokeWidth', 2);
       connectingHoverNode = null;
     }
+
+    // Tooltip: 取消计时并隐藏
+    cancelTooltip();
   });
   
   // 节点移动时更新工具栏位置
   graph.on('node:moving', ({ node }) => {
     hideContextMenu();  // 拖动节点时隐藏右键菜单
+    cancelTooltip();    // 拖动时隐藏 tooltip
     const cells = graph!.getSelectedCells();
     if (cells.length === 1 && cells[0].id === node.id && nodeToolbar?.style.display !== 'none') {
       showNodeToolbar(node);

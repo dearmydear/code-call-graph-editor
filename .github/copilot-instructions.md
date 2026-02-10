@@ -31,7 +31,7 @@
         "uri": "相对工作区的文件路径",
         "containerName": "所属类名（如果是方法则填写，函数则省略此字段）",
         "line": 0,
-        "signature": "(参数类型1, 参数类型2)"
+        "signature": "(参数类型1, 参数类型2)  // 有类型的语言填类型，无类型的语言填参数名"
       }
     }
   ],
@@ -58,7 +58,7 @@
 | `symbol.uri` | string | ✅ | 文件路径，**相对于工作区根目录** |
 | `symbol.containerName` | string | 可选 | 所属类名。仅当该方法属于某个类时填写 |
 | `symbol.line` | number | ✅ | 函数定义所在行号（**从 0 开始计数**） |
-| `symbol.signature` | string | 可选 | 参数类型签名，格式：`"(type1, type2)"`，无参数时为 `"()"` |
+| `symbol.signature` | string | 可选 | 参数签名。**有类型注解的语言**写参数类型，如 `"(number, number)"`；**无类型注解的语言**（Python/Ruby/Lua/JS）写参数名，如 `"(name, level)"`；无参数时为 `"()"` |
 | `tags` | string[] | 可选 | 自定义标签，如 `["入口"]`、`["异步"]`、`["关键"]` |
 | `status` | `"normal"` 或 `"broken"` | 可选 | 默认 `normal` |
 | `content` | string | 可选 | 仅 `note` 类型使用，Markdown 内容 |
@@ -76,7 +76,13 @@
 - **label 格式**：如果是类的方法，label 用 `"方法名\n类名"` 格式显示（`\n` 是换行符）
 - **行号从 0 开始**：JavaScript/TypeScript 文件中第 1 行对应 `line: 0`
 - **相对路径**：`symbol.uri` 必须是相对于工作区根目录的路径，如 `src/services/calculator.ts`
-- **signature 格式**：只写参数类型，不写参数名。如 `"(number, number)"` 而不是 `"(a: number, b: number)"`
+- **signature 格式**：
+  - **有类型注解的语言**（TypeScript/Java/C#/Go/Rust 等）：只写参数类型，不写参数名。如 `"(number, number)"`
+  - **无类型注解的语言**（Python 无注解/Ruby/Lua/JavaScript 等）：写参数名。如 `"(name, level)"`
+  - **Python 带类型注解**：写参数类型。如 `"(str, int)"`
+  - **Python 特殊参数**：保留 `*args`、`**kwargs` 原样
+  - **PHP**：写参数类型（如有），如 `"(int, string)"`
+  - **Go**：写参数类型，如 `"(int, string)"`
 - **不要遗漏调用关系**：包括直接调用、通过 `this` 的方法调用、`new` 构造函数调用
 - **避免重复节点**：同一个函数只创建一个节点，即使它被调用多次
 

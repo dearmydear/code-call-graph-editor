@@ -243,61 +243,270 @@ export class CallGraphGenerator {
 
   /**
    * 从 Hover 文本中提取参数类型签名
-   * TypeScript hover 格式通常是: (method) ClassName.methodName(param: type): returnType
+   * 支持多种编程语言的 Hover 格式：
+   * - TypeScript: ```typescript\n(method) Class.method(a: number, b: string): void\n```
+   * - Python:     ```python\n(function) def func(a: int, b: str) -> None\n```
+   * - Go:         ```go\nfunc Foo(a int, b string) error\n```
+   * - Java/C#:    ```java\nvoid method(int a, String b)\n```
+   * - Rust:       ```rust\nfn foo(a: i32, b: &str) -> Result<()>\n```
+   * - PHP:        ```php\nfunction foo(int $a, string $b): void\n```
+   * - Ruby/Lua:   def func(a, b) / function func(a, b)
    */
   private extractSignatureFromHover(hoverText: string): string | undefined {
     if (!hoverText) {
       return undefined;
     }
 
-    // 匹配 TypeScript 代码块中的签名
-    // 格式如: ```typescript\n(method) Calculator.add(a: number, b: number): number\n```
-    const codeBlockMatch = hoverText.match(/```typescript\s*\n?(.*?)\n?```/s);
-    const signatureText = codeBlockMatch ? codeBlockMatch[1] : hoverText;
+    // 匹配任意语言的代码块（```typescript, ```python, ```go, ```csharp 等）
+    const codeBlockMatch = hoverText.match(/```\w*\s*\n?([\s\S]*?)\n?```/);
+    const signatureText = codeBlockMatch ? codeBlockMatch[1].trim() : hoverText;
 
-    // 匹配括号内的参数部分
-    const paramsMatch = signatureText.match(/\(([^)]*)\)\s*(?::|=>)/);
-    if (!paramsMatch) {
-      // 尝试匹配无返回类型的情况
-      const simpleMatch = signatureText.match(/\(([^)]*)\)\s*$/m);
-      if (!simpleMatch) {
-        return undefined;
-      }
-      return this.extractTypesFromParams(simpleMatch[1]);
+    // 模式1: 括号后跟返回类型指示符
+    // TypeScript/Rust/Kotlin:  (...): ReturnType  或  (...) => ReturnType
+    // Python/Rust:             (...) -> ReturnType
+    // PHP:                     (...): ReturnType
+    const withReturnType = signatureText.match(/\(([^)]*)\)\s*(?::|=>|->)/);
+    if (withReturnType) {
+      return this.extractTypesFromParams(withReturnType[1]);
     }
 
-    return this.extractTypesFromParams(paramsMatch[1]);
+    // 模式2: 括号在行末（无返回类型声明，如 Ruby/Lua/Python 无注解）
+    const atEnd = signatureText.match(/\(([^)]*)\)\s*$/m);
+    if (atEnd) {
+      return this.extractTypesFromParams(atEnd[1]);
+    }
+
+    return undefined;
   }
 
   /**
-   * 从参数字符串中提取类型（只保留类型，不含参数名）
-   * 例如: "a: number, b: number" -> "(number, number)"
+   * 从参数字符串中提取类型信息
+   * 自动检测参数格式，支持多种编程语言
+   *
+   * 支持的格式：
+   * - "name: Type"       → TypeScript/Python/Rust/Kotlin/Swift（冒号分隔）
+   * - "Type name"        → Java/C#/C++/Dart（类型在前）
+   * - "name Type"        → Go（类型在后，无冒号）
+   * - "Type $name"       → PHP（$前缀变量名）
+   * - "*args, **kwargs"  → Python 可变参数
+   * - "...args"          → JS/TS rest 参数
+   * - "name=default"     → Python 默认值参数
+   * - "name"             → 动态语言（无类型注解，保留参数名）
    */
   private extractTypesFromParams(paramsStr: string): string {
     if (!paramsStr.trim()) {
       return '()';
     }
 
-    const params = paramsStr.split(',').map(param => {
-      const trimmed = param.trim();
-      // 检查是否可选参数 (name?: type)
-      const isOptional = trimmed.includes('?:') || trimmed.includes('?');
-      // 提取类型部分（冒号后面的内容）
-      const colonMatch = trimmed.match(/\??:\s*(.+)/);
-      if (!colonMatch) {
-        // 没有类型注解，返回 any
-        return isOptional ? 'any?' : 'any';
-      }
-      let type = colonMatch[1].trim();
-      // 移除可能的默认值
-      const eqIndex = type.indexOf('=');
-      if (eqIndex !== -1) {
-        type = type.substring(0, eqIndex).trim();
-      }
-      return isOptional ? `${type}?` : type;
-    });
+    // 智能分割参数（处理泛型中的逗号，如 Map<K, V>）
+    const paramTokens = this.splitParams(paramsStr);
 
-    return `(${params.join(', ')})`;
+    // 检测参数风格
+    const style = this.detectParamStyle(paramTokens);
+
+    const types = paramTokens.map(param => {
+      return this.extractTypeFromSingleParam(param.trim(), style);
+    }).filter(t => t !== '');
+
+    return `(${types.join(', ')})`;
+  }
+
+  /**
+   * 智能分割参数列表
+   * 处理嵌套泛型中的逗号，如 Map<string, number> 不会被错误分割
+   */
+  private splitParams(paramsStr: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let depth = 0;
+
+    for (const char of paramsStr) {
+      if (char === '<' || char === '[' || char === '{') {
+        depth++;
+        current += char;
+      } else if (char === '>' || char === ']' || char === '}') {
+        depth--;
+        current += char;
+      } else if (char === ',' && depth === 0) {
+        result.push(current);
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+
+    if (current.trim()) {
+      result.push(current);
+    }
+
+    return result;
+  }
+
+  /**
+   * 检测参数风格
+   * 通过分析参数列表的格式来判断语言类型
+   */
+  private detectParamStyle(params: string[]): 'colon' | 'type-before' | 'type-after-go' | 'php' | 'dynamic' {
+    for (const param of params) {
+      const trimmed = param.trim();
+      if (!trimmed) { continue; }
+
+      // 跳过特殊参数（*args, **kwargs, ...rest, self, this 等）
+      if (trimmed.startsWith('*') || trimmed.startsWith('...')) { continue; }
+      if (trimmed === 'self' || trimmed === 'cls' || trimmed === 'this') { continue; }
+
+      // PHP 风格: 包含 $
+      if (trimmed.includes('$')) { return 'php'; }
+
+      // 冒号风格: name: Type（TypeScript/Python/Rust/Kotlin/Swift）
+      if (/\w\s*\??\s*:/.test(trimmed)) { return 'colon'; }
+
+      // 多 token 参数（有空格分隔）
+      const cleanParam = trimmed.replace(/\s*=\s*.*$/, ''); // 去掉默认值
+      const tokens = cleanParam.split(/\s+/).filter(t => t);
+      if (tokens.length >= 2) {
+        // 判断 "Type name"（Java/C#） vs "name Type"（Go）
+        if (this.looksLikeType(tokens[0])) {
+          return 'type-before';
+        }
+        return 'type-after-go';
+      }
+    }
+
+    // 无类型注解 — 动态语言（Python 无注解 / Ruby / Lua / JS 等）
+    return 'dynamic';
+  }
+
+  /**
+   * 启发式判断：一个 token 是否看起来像类型名
+   * 用于区分 "Type name"（Java）和 "name Type"（Go）
+   */
+  private looksLikeType(token: string): boolean {
+    // 常见原始类型关键字
+    const typeKeywords = new Set([
+      // Java/C/C++
+      'int', 'float', 'double', 'long', 'short', 'byte', 'char', 'bool', 'boolean',
+      'string', 'void', 'unsigned', 'signed', 'const',
+      // C# / Dart
+      'String', 'Object', 'List', 'Map', 'Set', 'Array', 'Dictionary',
+      'Int32', 'Int64', 'Single', 'Double', 'Boolean', 'Byte',
+      // 常见泛型容器
+      'ArrayList', 'HashMap', 'HashSet', 'LinkedList', 'TreeMap',
+    ]);
+
+    if (typeKeywords.has(token)) { return true; }
+
+    // Java/C#/Dart 约定：类型名以大写字母开头
+    if (/^[A-Z]/.test(token)) { return true; }
+
+    // 数组类型: int[], String[]
+    if (token.endsWith('[]')) { return true; }
+
+    // 指针/引用类型: int*, char*, int&
+    if (/[*&]$/.test(token)) { return true; }
+
+    return false;
+  }
+
+  /**
+   * 从单个参数中提取类型（或在无类型时保留参数名）
+   */
+  private extractTypeFromSingleParam(
+    param: string,
+    style: 'colon' | 'type-before' | 'type-after-go' | 'php' | 'dynamic'
+  ): string {
+    if (!param) { return ''; }
+
+    // ── 特殊参数处理 ──
+
+    // Python *args, **kwargs
+    if (param.startsWith('**')) {
+      const colonMatch = param.match(/^\*\*\w+\s*:\s*(.+)/);
+      return colonMatch ? `**${colonMatch[1].trim()}` : param;
+    }
+    if (param.startsWith('*')) {
+      const colonMatch = param.match(/^\*\w+\s*:\s*(.+)/);
+      return colonMatch ? `*${colonMatch[1].trim()}` : param;
+    }
+
+    // JS/TS rest 参数 ...args
+    if (param.startsWith('...')) {
+      const colonMatch = param.match(/^\.\.\.\w+\s*:\s*(.+)/);
+      if (colonMatch) { return `...${colonMatch[1].trim()}`; }
+      return param;
+    }
+
+    // Python self/cls, JS this — 跳过
+    if (param === 'self' || param === 'cls' || param === 'this') { return ''; }
+
+    // 可选参数检测
+    const isOptional = param.includes('?:') || (param.includes('?') && style === 'colon');
+
+    switch (style) {
+      case 'colon': {
+        // TypeScript/Python/Rust/Kotlin: name: Type 或 name?: Type
+        const colonMatch = param.match(/^\w[\w?]*\s*\??\s*:\s*(.+)/);
+        if (colonMatch) {
+          let type = colonMatch[1].trim();
+          // 去除默认值
+          const eqIndex = type.indexOf('=');
+          if (eqIndex !== -1) {
+            type = type.substring(0, eqIndex).trim();
+          }
+          return isOptional ? `${type}?` : type;
+        }
+        // 同一签名中可能有部分参数无类型 → 保留参数名
+        return this.extractParamName(param);
+      }
+
+      case 'type-before': {
+        // Java/C#/C++/Dart: Type name  或  Type name = default
+        const cleanParam = param.replace(/\s*=\s*.*$/, '').trim();
+        const tokens = cleanParam.split(/\s+/);
+        if (tokens.length >= 2) {
+          // 除最后一个 token（参数名）外，其余都是类型（如 "unsigned int name"）
+          return tokens.slice(0, -1).join(' ');
+        }
+        return param;
+      }
+
+      case 'type-after-go': {
+        // Go: name Type
+        const tokens = param.trim().split(/\s+/);
+        if (tokens.length >= 2) {
+          return tokens.slice(1).join(' ');
+        }
+        return param;
+      }
+
+      case 'php': {
+        // PHP: ?Type $name  或  $name
+        const phpMatch = param.match(/^(\??\w[\w\\]*)\s+\$/);
+        if (phpMatch) { return phpMatch[1]; }
+        // $name 无类型 → 提取变量名（去掉 $）
+        const nameMatch = param.match(/\$(\w+)/);
+        return nameMatch ? nameMatch[1] : param;
+      }
+
+      case 'dynamic':
+      default: {
+        // 动态语言（Python 无注解 / Ruby / Lua / JS 等）— 保留参数名
+        return this.extractParamName(param);
+      }
+    }
+  }
+
+  /**
+   * 从参数中提取纯参数名（去除默认值等修饰）
+   */
+  private extractParamName(param: string): string {
+    // 去除默认值: name=value → name
+    const eqMatch = param.match(/^(\w+)\s*=/);
+    if (eqMatch) { return eqMatch[1]; }
+
+    // 提取纯名称
+    const nameMatch = param.match(/^(\w+)/);
+    return nameMatch ? nameMatch[1] : param;
   }
 
   /**

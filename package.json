@@ -2,11 +2,14 @@
 	"name": "code-call-graph-editor",
 	"displayName": "%displayName%",
 	"description": "%description%",
-	"version": "0.0.1",
-	"publisher": "callgraph-editor",
+	"version": "0.0.2",
+	"publisher": "dear-my-dear",
 	"private": false,
-	"license": "MIT",
-	"repository": {
+	"license": "MIT",	"icon": "images/icon.png",
+	"galleryBanner": {
+		"color": "#1e3a5f",
+		"theme": "dark"
+	},	"repository": {
 		"type": "git",
 		"url": "https://github.com/dearmydear/call-graph-editor"
 	},

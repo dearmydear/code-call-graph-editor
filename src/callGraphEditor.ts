@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { getNonce } from './util';
 import type { CallGraphDocument, Node, Edge } from './models/callGraphDocument';
+import { normalizeSymbolName } from './services/methodLibrary';
 
 /**
  * Provider for call graph editors.
@@ -202,7 +203,7 @@ export class CallGraphEditorProvider implements vscode.CustomTextEditorProvider 
 			);
 
 			if (symbols && symbols.length > 0) {
-				const targetSymbol = this.findSymbolByName(symbols, node.symbol.name, node.symbol.containerName);
+				const targetSymbol = this.findSymbolByName(symbols, node.symbol.name, node.symbol.containerName, node.symbol.line);
 				if (targetSymbol) {
 					const position = targetSymbol.selectionRange.start;
 					editor.selection = new vscode.Selection(position, position);
@@ -232,23 +233,71 @@ export class CallGraphEditorProvider implements vscode.CustomTextEditorProvider 
 
 	/**
 	 * Find symbol by name in document symbols (recursive)
+	 * 支持跨语言匹配：通过 normalizeSymbolName 提取纯方法名后比较
 	 */
 	private findSymbolByName(
 		symbols: vscode.DocumentSymbol[], 
 		name: string, 
-		containerName?: string
+		containerName?: string,
+		line?: number
 	): vscode.DocumentSymbol | undefined {
+		const { bareName: targetBareName } = normalizeSymbolName(name);
+
+		// 构建限定名变体（Lua: Container.method / Container:method）
+		const qualifiedNames: string[] = [];
+		if (containerName) {
+			qualifiedNames.push(`${containerName}.${name}`);
+			qualifiedNames.push(`${containerName}:${name}`);
+			qualifiedNames.push(`${containerName}.${targetBareName}`);
+			qualifiedNames.push(`${containerName}:${targetBareName}`);
+		}
+
 		for (const symbol of symbols) {
-			// 匹配名称
+			const { bareName: symbolBareName } = normalizeSymbolName(symbol.name);
+
+			// 如果有容器名，先找容器
+			if (containerName) {
+				if (symbol.name === containerName && symbol.children) {
+					// 容器内查找：精确匹配 → 纯名匹配 → 行号匹配
+					const exactChild = symbol.children.find(c => c.name === name);
+					if (exactChild) return exactChild;
+
+					const bareChild = symbol.children.find(c => {
+						const { bareName } = normalizeSymbolName(c.name);
+						return bareName === targetBareName;
+					});
+					if (bareChild) return bareChild;
+
+					if (line !== undefined) {
+						const lineChild = symbol.children.find(c => c.selectionRange.start.line === line);
+						if (lineChild) return lineChild;
+					}
+				}
+
+				// 限定名匹配（Lua 等语言）
+				if (qualifiedNames.includes(symbol.name)) return symbol;
+				if (qualifiedNames.includes(symbolBareName) && symbolBareName !== symbol.name) return symbol;
+
+				// 后缀匹配（Lua：代码用 pmodule:method 但 containerName 是模块名）
+				const suffixes = [`.${name}`, `:${name}`, `.${targetBareName}`, `:${targetBareName}`];
+				if (suffixes.some(s => symbol.name.endsWith(s) || symbolBareName.endsWith(s))) return symbol;
+			}
+
+			// 精确匹配名称
 			if (symbol.name === name) {
-				// 如果指定了容器名，检查是否在正确的容器中
 				if (!containerName || this.isInContainer(symbols, symbol, containerName)) {
 					return symbol;
 				}
 			}
+
+			// 纯名匹配（去掉参数后的方法名）
+			if (symbolBareName === targetBareName && symbolBareName !== symbol.name) {
+				return symbol;
+			}
+
 			// 递归搜索子符号
 			if (symbol.children && symbol.children.length > 0) {
-				const found = this.findSymbolByName(symbol.children, name, containerName);
+				const found = this.findSymbolByName(symbol.children, name, containerName, line);
 				if (found) return found;
 			}
 		}
