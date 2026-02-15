@@ -17,6 +17,38 @@
 3. 搜索 `Code Call Graph Editor`
 4. 点击 **安装**
 
+### Windows 源码开发环境（从仓库运行）
+
+如果你在 Windows 开发本仓库，出现 `找不到模块 'vscode'`、`找不到模块 'path'`、或 `npm 无法识别`，请执行：
+
+```powershell
+# 1) 安装 Node.js LTS（用户级）
+winget install --id OpenJS.NodeJS.LTS --exact --source winget --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
+
+# 2) 重开 VS Code（刷新 PATH）
+
+# 3) 安装依赖
+npm.cmd install
+
+# 4) 编译验证
+npm.cmd run compile
+```
+
+如果当前 PowerShell 会话里仍提示 `npm` 不存在，可在当前会话刷新 PATH：
+
+```powershell
+$machinePath = [Environment]::GetEnvironmentVariable('Path','Machine')
+$userPath = [Environment]::GetEnvironmentVariable('Path','User')
+$env:Path = "$machinePath;$userPath"
+```
+
+随后执行 `npm.cmd -v` 和 `npm.cmd run compile`。
+
+如果编辑器里 TypeScript 红线还在：
+1. `TypeScript: Select TypeScript Version` → `Use Workspace Version`
+2. `TypeScript: Restart TS Server`
+3. `Developer: Reload Window`
+
 
 ---
 
@@ -65,6 +97,29 @@
 
 
 ![代码跳转与方法绑定](images/code-navigation.gif)
+
+---
+
+### 添加到活动代码图
+
+在代码编辑器中，右键函数/方法，选择 **Add to Active Call Graph** 即可添加到代码图。
+
+行为说明：
+- 如果当前会话里有已打开的代码图页，会追加到**最后记录的活动** `.callgraph.json` 页面。
+- 如果当前没有打开任何代码图页，会弹出选择窗口，列出工作区所有 `.callgraph.json` 文件。
+- 选择后会自动打开目标代码图页，并将当前方法追加为节点。
+- 如果工作区不存在 `.callgraph.json`，会提示不存在。
+
+截图占位：
+- TODO：补充 `images/add-to-active-callgraph.gif`
+- 建议录制内容：
+  1. 代码页右键点击 **Add to Active Call Graph**。
+  2. 无打开代码图时弹出文件选择窗口。
+  3. 自动打开被选中的代码图页。
+  4. 新节点出现在图中。
+
+<!-- TODO: 有素材后替换 -->
+![添加到活动代码图](images/add-to-active-callgraph.gif)
 
 ---
 

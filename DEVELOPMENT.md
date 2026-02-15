@@ -259,6 +259,32 @@ CallGraphGenerator.generateFromCodePosition()
 
 ### 环境搭建
 
+#### Windows（新机器初始化）
+
+> 适用场景：首次在 Windows 上拉取本仓库，出现 `Cannot find module 'vscode' / 'path' / 'Buffer'` 等 TypeScript 报错。
+
+```powershell
+# 1) 安装 Node.js LTS（用户级，无需管理员）
+winget install --id OpenJS.NodeJS.LTS --exact --source winget --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
+
+# 2) 关闭并重新打开 VS Code（让 PATH 生效）
+
+# 3) 在仓库根目录安装依赖
+npm.cmd install
+
+# 4) 编译验证
+npm.cmd run compile
+```
+
+说明：
+- 在 PowerShell 中如果执行 `npm` 遇到执行策略拦截（`npm.ps1` 被禁用），优先使用 `npm.cmd`。
+- 依赖安装完成后，`node_modules/@types/vscode` 与 `node_modules/@types/node` 会提供 `vscode`、`path`、`Buffer` 等类型声明。
+
+如果编辑器红线仍未消失：
+1. 命令面板执行：`TypeScript: Select TypeScript Version` → `Use Workspace Version`
+2. 命令面板执行：`TypeScript: Restart TS Server`
+3. 仍异常时执行：`Developer: Reload Window`
+
 ```bash
 # 安装依赖
 npm install

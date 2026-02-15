@@ -17,6 +17,38 @@ English | [简体中文](README.zh-cn.md)
 3. Search for `Code Call Graph Editor`
 4. Click **Install**
 
+### Windows Dev Environment (from source)
+
+If you develop this repo on Windows and see errors like `Cannot find module 'vscode'`, `Cannot find module 'path'`, or `npm is not recognized`, run:
+
+```powershell
+# 1) Install Node.js LTS (user scope)
+winget install --id OpenJS.NodeJS.LTS --exact --source winget --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
+
+# 2) Reopen VS Code (PATH refresh)
+
+# 3) Install dependencies
+npm.cmd install
+
+# 4) Verify build
+npm.cmd run compile
+```
+
+If `npm` is still not recognized in current PowerShell session, refresh PATH in-session:
+
+```powershell
+$machinePath = [Environment]::GetEnvironmentVariable('Path','Machine')
+$userPath = [Environment]::GetEnvironmentVariable('Path','User')
+$env:Path = "$machinePath;$userPath"
+```
+
+Then run `npm.cmd -v` and `npm.cmd run compile`.
+
+If TypeScript diagnostics still persist in editor:
+1. `TypeScript: Select TypeScript Version` → `Use Workspace Version`
+2. `TypeScript: Restart TS Server`
+3. `Developer: Reload Window`
+
 
 ---
 
@@ -65,6 +97,29 @@ Canvas editor based on [AntV X6](https://x6.antv.antgroup.com/) with rich intera
 
 
 ![Code Navigation & Method Binding](images/code-navigation.gif)
+
+---
+
+### Add to Active Call Graph
+
+From a code editor, right-click a function/method and choose **Add to Active Call Graph**.
+
+Behavior:
+- If there are opened call graph pages, it appends to the **last recorded active** `.callgraph.json` page.
+- If no call graph page is currently opened, it shows a picker of all `.callgraph.json` files in workspace.
+- After selection, the extension opens that call graph page and appends the method node.
+- If no `.callgraph.json` exists in workspace, it shows a warning.
+
+Screenshot placeholder:
+- TODO: add `images/add-to-active-callgraph.gif`
+- Recommended capture content:
+  1. Right-click on a method in code editor and click **Add to Active Call Graph**.
+  2. No opened call graph case: show file picker.
+  3. Auto-open selected call graph page.
+  4. New node appears in graph.
+
+<!-- TODO: replace placeholder with actual media when available -->
+![Add to Active Call Graph](images/add-to-active-callgraph.gif)
 
 ---
 

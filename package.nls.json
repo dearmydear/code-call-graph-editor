@@ -4,6 +4,7 @@
 	"customEditor.callGraph": "Call Graph",
 	"command.testLSP": "Test LSP Call Hierarchy Query",
 	"command.createGraphFromMethod": "Create Call Graph",
+	"command.addToActiveGraph": "Add to Active Call Graph",
 	"command.addToMethodLibrary": "Add to Method Library",
 	"command.viewMethodLibrary": "View Method Library",
 	"command.clearMethodLibrary": "Clear Method Library",

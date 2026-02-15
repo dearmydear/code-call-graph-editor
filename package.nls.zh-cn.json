@@ -4,6 +4,7 @@
 	"customEditor.callGraph": "调用图",
 	"command.testLSP": "测试 LSP 调用层次查询",
 	"command.createGraphFromMethod": "创建节点关系图",
+	"command.addToActiveGraph": "添加到活动代码图",
 	"command.addToMethodLibrary": "添加到方法库",
 	"command.viewMethodLibrary": "查看方法库",
 	"command.clearMethodLibrary": "清空方法库",

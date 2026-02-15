@@ -2,7 +2,7 @@
 	"name": "code-call-graph-editor",
 	"displayName": "%displayName%",
 	"description": "%description%",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"publisher": "dear-my-dear",
 	"private": false,
 	"license": "MIT",	"icon": "images/icon.png",
@@ -66,6 +66,12 @@
 				"icon": "$(graph)"
 			},
 			{
+				"command": "callGraph.addToActiveGraph",
+				"title": "%command.addToActiveGraph%",
+				"category": "Call Graph",
+				"icon": "$(add)"
+			},
+			{
 				"command": "callGraph.addToMethodLibrary",
 				"title": "%command.addToMethodLibrary%",
 				"category": "Call Graph",
@@ -90,9 +96,14 @@
 					"group": "callgraph@1"
 				},
 				{
+					"command": "callGraph.addToActiveGraph",
+					"when": "editorTextFocus && editorHasDefinitionProvider && !isInDiffEditor && resourceScheme == 'file' && !(resourceFilename =~ /\\.callgraph\\.json$/)",
+					"group": "callgraph@2"
+				},
+				{
 					"command": "callGraph.addToMethodLibrary",
 					"when": "editorTextFocus && editorHasDefinitionProvider",
-					"group": "callgraph@2"
+					"group": "callgraph@3"
 				}
 			]
 		},

@@ -2,16 +2,48 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 // 使用 React Flow 版本
 import { CallGraphEditorProvider } from './callGraphEditorReactFlow';
+import type { CallGraphDocument } from './models/callGraphDocument';
 import { LSPCallHierarchyProvider } from './services/lspIntegration';
 import { CallGraphGenerator } from './services/callGraphGenerator';
 import { MethodLibrary, getSymbolAtCursor, sanitizeFileName } from './services/methodLibrary';
 
+const LAST_ACTIVE_GRAPH_KEY = 'callGraph.lastActiveGraphUri';
+const CALL_GRAPH_VIEW_TYPE = 'codeCallGraph.callGraph';
+const CALL_GRAPH_SUFFIX = '.callgraph.json';
+
+type MutableCallGraphDocument = CallGraphDocument & {
+	nodes: Array<Record<string, any>>;
+	edges: Array<Record<string, any>>;
+};
+
 export function activate(context: vscode.ExtensionContext) {
 	// 创建方法库实例
 	const methodLibrary = new MethodLibrary(context);
+	let lastActiveCallGraphUri = readStoredCallGraphUri(context);
+
+	const persistLastActiveCallGraphUri = (uri: vscode.Uri) => {
+		lastActiveCallGraphUri = uri;
+		void context.workspaceState.update(LAST_ACTIVE_GRAPH_KEY, uri.toString());
+	};
+
+	const refreshLastActiveCallGraphFromTabs = () => {
+		const activeTab = vscode.window.tabGroups.activeTabGroup?.activeTab;
+		if (!activeTab) {
+			return;
+		}
+
+		const uri = extractCallGraphUriFromTabInput(activeTab.input);
+		if (uri) {
+			persistLastActiveCallGraphUri(uri);
+		}
+	};
 
 	// Register our custom editor provider - 传入方法库实例
 	context.subscriptions.push(CallGraphEditorProvider.register(context, methodLibrary));
+
+	context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(refreshLastActiveCallGraphFromTabs));
+	context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabGroups(refreshLastActiveCallGraphFromTabs));
+	refreshLastActiveCallGraphFromTabs();
 
 	// Phase 2: Register LSP test command
 	context.subscriptions.push(
@@ -184,6 +216,88 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
+	// 添加方法到最后活动代码图
+	context.subscriptions.push(
+		vscode.commands.registerCommand('callGraph.addToActiveGraph', async () => {
+			const editor = vscode.window.activeTextEditor;
+			if (!editor) {
+				vscode.window.showErrorMessage(vscode.l10n.t('Please open a code file first'));
+				return;
+			}
+
+			try {
+				const symbolInfo = await getSymbolAtCursor(editor);
+				if (!symbolInfo) {
+					return;
+				}
+
+				refreshLastActiveCallGraphFromTabs();
+
+				const openCallGraphUris = getOpenCallGraphUris();
+				let targetUri: vscode.Uri | undefined;
+
+				if (lastActiveCallGraphUri && openCallGraphUris.some(uri => uri.toString() === lastActiveCallGraphUri?.toString())) {
+					targetUri = lastActiveCallGraphUri;
+				} else if (openCallGraphUris.length > 0) {
+					targetUri = openCallGraphUris[0];
+				}
+
+				if (!targetUri) {
+					targetUri = await pickCallGraphTarget();
+					if (!targetUri) {
+						return;
+					}
+
+					await vscode.commands.executeCommand('vscode.openWith', targetUri, CALL_GRAPH_VIEW_TYPE);
+				}
+
+				const targetDoc = await vscode.workspace.openTextDocument(targetUri);
+				const callGraphDoc = parseCallGraphDocument(targetDoc.getText());
+
+				const nodeId = createNodeId(callGraphDoc.nodes);
+				const position = calculateNodePosition(callGraphDoc.nodes, 220, 140);
+
+				callGraphDoc.nodes.push({
+					id: nodeId,
+					label: symbolInfo.name,
+					type: 'code',
+					symbol: {
+						name: symbolInfo.name,
+						uri: symbolInfo.uri,
+						containerName: symbolInfo.containerName,
+						line: symbolInfo.line,
+						signature: symbolInfo.signature,
+					},
+					status: 'normal',
+					x: position.x,
+					y: position.y,
+				});
+
+				const edit = new vscode.WorkspaceEdit();
+				edit.replace(
+					targetDoc.uri,
+					new vscode.Range(0, 0, targetDoc.lineCount, 0),
+					JSON.stringify(callGraphDoc, null, 2)
+				);
+
+				const applied = await vscode.workspace.applyEdit(edit);
+				if (!applied) {
+					vscode.window.showErrorMessage(vscode.l10n.t('Failed to update call graph file'));
+					return;
+				}
+
+				persistLastActiveCallGraphUri(targetDoc.uri);
+				vscode.window.showInformationMessage(
+					vscode.l10n.t('Added method "{0}" to call graph: {1}', symbolInfo.name, path.basename(targetDoc.uri.fsPath))
+				);
+			} catch (error) {
+				const errorMessage = error instanceof Error ? error.message : String(error);
+				vscode.window.showErrorMessage(vscode.l10n.t('Failed to add method to call graph: {0}', errorMessage));
+				console.error('添加到活动代码图错误:', error);
+			}
+		})
+	);
+
 	// 添加方法到方法库
 	context.subscriptions.push(
 		vscode.commands.registerCommand('callGraph.addToMethodLibrary', async () => {
@@ -267,4 +381,147 @@ function countTotalNodes(nodes: any[]): number {
 		}
 	}
 	return count;
+}
+
+function readStoredCallGraphUri(context: vscode.ExtensionContext): vscode.Uri | undefined {
+	const raw = context.workspaceState.get<string>(LAST_ACTIVE_GRAPH_KEY);
+	if (!raw) {
+		return undefined;
+	}
+
+	try {
+		const uri = vscode.Uri.parse(raw);
+		return isCallGraphUri(uri) ? uri : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function isCallGraphUri(uri: vscode.Uri): boolean {
+	return uri.scheme === 'file' && uri.fsPath.toLowerCase().endsWith(CALL_GRAPH_SUFFIX);
+}
+
+function extractCallGraphUriFromTabInput(input: unknown): vscode.Uri | undefined {
+	if (input instanceof vscode.TabInputCustom) {
+		if (input.viewType === CALL_GRAPH_VIEW_TYPE && isCallGraphUri(input.uri)) {
+			return input.uri;
+		}
+		return undefined;
+	}
+
+	if (input instanceof vscode.TabInputText && isCallGraphUri(input.uri)) {
+		return input.uri;
+	}
+
+	return undefined;
+}
+
+async function pickCallGraphTarget(): Promise<vscode.Uri | undefined> {
+	const files = await vscode.workspace.findFiles(`**/*${CALL_GRAPH_SUFFIX}`, '**/node_modules/**');
+	if (files.length === 0) {
+		vscode.window.showWarningMessage(vscode.l10n.t('No call graph file found. Please open or create a .callgraph.json file first'));
+		return undefined;
+	}
+
+	const items = files.map(uri => ({
+		label: vscode.workspace.asRelativePath(uri),
+		detail: uri.fsPath,
+		uri,
+	}));
+
+	const picked = await vscode.window.showQuickPick(items, {
+		placeHolder: vscode.l10n.t('Select target call graph file'),
+		matchOnDetail: true,
+	});
+
+	return picked?.uri;
+}
+
+function getOpenCallGraphUris(): vscode.Uri[] {
+	const result = new Map<string, vscode.Uri>();
+	for (const group of vscode.window.tabGroups.all) {
+		for (const tab of group.tabs) {
+			const uri = extractCallGraphUriFromTabInput(tab.input);
+			if (uri) {
+				result.set(uri.toString(), uri);
+			}
+		}
+	}
+	return [...result.values()];
+}
+
+function parseCallGraphDocument(text: string): MutableCallGraphDocument {
+	if (!text.trim()) {
+		return { title: '', nodes: [], edges: [] };
+	}
+
+	let parsed: any;
+	try {
+		parsed = JSON.parse(text);
+	} catch {
+		throw new Error(vscode.l10n.t('Target call graph file contains invalid JSON'));
+	}
+
+	if (!parsed || typeof parsed !== 'object') {
+		throw new Error(vscode.l10n.t('Target call graph file content is invalid'));
+	}
+
+	if (!Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+		throw new Error(vscode.l10n.t('Target call graph file must contain nodes and edges arrays'));
+	}
+
+	return parsed as MutableCallGraphDocument;
+}
+
+function createNodeId(nodes: Array<Record<string, any>>): string {
+	const idSet = new Set(nodes.map(node => String(node.id)));
+	let id = '';
+	do {
+		id = `node-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+	} while (idSet.has(id));
+	return id;
+}
+
+function calculateNodePosition(
+	nodes: Array<Record<string, any>>,
+	horizontalOffset: number,
+	verticalOffset: number
+): { x: number; y: number } {
+	const positionedNodes = nodes.filter(node => typeof node.x === 'number' && typeof node.y === 'number');
+	if (positionedNodes.length === 0) {
+		return { x: 200, y: 120 };
+	}
+
+	const selectedNodes = positionedNodes.filter(node => node.selected === true);
+	if (selectedNodes.length > 0) {
+		const anchor = selectedNodes.reduce((best, current) => {
+			if (current.x > best.x) {
+				return current;
+			}
+			if (current.x === best.x && current.y > best.y) {
+				return current;
+			}
+			return best;
+		}, selectedNodes[0]);
+
+		return {
+			x: anchor.x + horizontalOffset,
+			y: anchor.y + verticalOffset,
+		};
+	}
+
+	const rightMost = positionedNodes.reduce((best, current) => {
+		if (current.x > best.x) {
+			return current;
+		}
+		if (current.x === best.x && current.y > best.y) {
+			return current;
+		}
+		return best;
+	}, positionedNodes[0]);
+
+	return {
+		x: rightMost.x + horizontalOffset,
+		y: rightMost.y,
+	};
 }
